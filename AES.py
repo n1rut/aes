@@ -39,233 +39,241 @@ inv_s_box = (
     0xA0, 0xE0, 0x3B, 0x4D, 0xAE, 0x2A, 0xF5, 0xB0, 0xC8, 0xEB, 0xBB, 0x3C, 0x83, 0x53, 0x99, 0x61,
     0x17, 0x2B, 0x04, 0x7E, 0xBA, 0x77, 0xD6, 0x26, 0xE1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0C, 0x7D,
 )
+class AESCipher:
+    def __init__(self, key_size=16, iv_size=16, hmac_key_size=16, salt_size=16, rounds=100000):
+        self.key_size = key_size
+        self.iv_size = iv_size
+        self.hmac_key_size = hmac_key_size
+        self.salt_size = salt_size
+        self.rounds = rounds
 
-def sub_bytes(s):
-    for i in range(4):
-        for j in range(4):
-            s[i][j] = s_box[s[i][j]]
+    def sub_bytes(self, s):
+        for i in range(4):
+            for j in range(4):
+                s[i][j] = s_box[s[i][j]]
 
-def inv_sub_bytes(s):
-    for i in range(4):
-        for j in range(4):
-            s[i][j] = inv_s_box[s[i][j]]
+    def inv_sub_bytes(self, s):
+        for i in range(4):
+            for j in range(4):
+                s[i][j] = inv_s_box[s[i][j]]
 
-def shift_rows(s):
-    s[0][1], s[1][1], s[2][1], s[3][1] = s[1][1], s[2][1], s[3][1], s[0][1]
-    s[0][2], s[1][2], s[2][2], s[3][2] = s[2][2], s[3][2], s[0][2], s[1][2]
-    s[0][3], s[1][3], s[2][3], s[3][3] = s[3][3], s[0][3], s[1][3], s[2][3]
+    def shift_rows(self, s):
+        s[0][1], s[1][1], s[2][1], s[3][1] = s[1][1], s[2][1], s[3][1], s[0][1]
+        s[0][2], s[1][2], s[2][2], s[3][2] = s[2][2], s[3][2], s[0][2], s[1][2]
+        s[0][3], s[1][3], s[2][3], s[3][3] = s[3][3], s[0][3], s[1][3], s[2][3]
 
-def inv_shift_rows(s):
-    s[0][1], s[1][1], s[2][1], s[3][1] = s[3][1], s[0][1], s[1][1], s[2][1]
-    s[0][2], s[1][2], s[2][2], s[3][2] = s[2][2], s[3][2], s[0][2], s[1][2]
-    s[0][3], s[1][3], s[2][3], s[3][3] = s[1][3], s[2][3], s[3][3], s[0][3]
+    def inv_shift_rows(self, s):
+        s[0][1], s[1][1], s[2][1], s[3][1] = s[3][1], s[0][1], s[1][1], s[2][1]
+        s[0][2], s[1][2], s[2][2], s[3][2] = s[2][2], s[3][2], s[0][2], s[1][2]
+        s[0][3], s[1][3], s[2][3], s[3][3] = s[1][3], s[2][3], s[3][3], s[0][3]
 
-def add_round_key(s, k):
-    for i in range(4):
-        for j in range(4):
-            s[i][j] ^= k[i][j]
+    def add_round_key(self, s, k):
+        for i in range(4):
+            for j in range(4):
+                s[i][j] ^= k[i][j]
 
-xtime = lambda a: (((a << 1) ^ 0x1B) & 0xFF) if (a & 0x80) else (a << 1)
+    def xtime(self, a):
+        return (((a << 1) ^ 0x1B) & 0xFF) if (a & 0x80) else (a << 1)
 
-def mix_single_column(a):
-    # see Sec 4.1.2 in The Design of Rijndael
-    t = a[0] ^ a[1] ^ a[2] ^ a[3]
-    u = a[0]
-    a[0] ^= t ^ xtime(a[0] ^ a[1])
-    a[1] ^= t ^ xtime(a[1] ^ a[2])
-    a[2] ^= t ^ xtime(a[2] ^ a[3])
-    a[3] ^= t ^ xtime(a[3] ^ u)
+    def mix_single_column(self, a):
+        # see Sec 4.1.2 in The Design of Rijndael
+        t = a[0] ^ a[1] ^ a[2] ^ a[3]
+        u = a[0]
+        a[0] ^= t ^ self.xtime(a[0] ^ a[1])
+        a[1] ^= t ^ self.xtime(a[1] ^ a[2])
+        a[2] ^= t ^ self.xtime(a[2] ^ a[3])
+        a[3] ^= t ^ self.xtime(a[3] ^ u)
 
-def mix_columns(s):
-    for i in range(4):
-        mix_single_column(s[i])
+    def mix_columns(self, s):
+        for i in range(4):
+            self.mix_single_column(s[i])
 
-def inv_mix_columns(s):
-    for i in range(4):
-        u = xtime(xtime(s[i][0] ^ s[i][2]))
-        v = xtime(xtime(s[i][1] ^ s[i][3]))
-        s[i][0] ^= u
-        s[i][1] ^= v
-        s[i][2] ^= u
-        s[i][3] ^= v
+    def inv_mix_columns(self, s):
+        for i in range(4):
+            u = self.xtime(self.xtime(s[i][0] ^ s[i][2]))
+            v = self.xtime(self.xtime(s[i][1] ^ s[i][3]))
+            s[i][0] ^= u
+            s[i][1] ^= v
+            s[i][2] ^= u
+            s[i][3] ^= v
 
-    mix_columns(s)
+        self.mix_columns(s)
 
-r_con = (
-    0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40,
-    0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D, 0x9A,
-    0x2F, 0x5E, 0xBC, 0x63, 0xC6, 0x97, 0x35, 0x6A,
-    0xD4, 0xB3, 0x7D, 0xFA, 0xEF, 0xC5, 0x91, 0x39,
-)
+    r_con = (
+        0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40,
+        0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D, 0x9A,
+        0x2F, 0x5E, 0xBC, 0x63, 0xC6, 0x97, 0x35, 0x6A,
+        0xD4, 0xB3, 0x7D, 0xFA, 0xEF, 0xC5, 0x91, 0x39,
+    )
 
-def BytesToMatrix(text):
-    return [list(text[i:i+4]) for i in range(0, len(text), 4)]
+    def BytesToMatrix(self, text):
+        return [list(text[i:i+4]) for i in range(0, len(text), 4)]
 
-def MatrixToBytes(matrix):
-    return bytes(sum(matrix, []))
+    def MatrixToBytes(self, matrix):
+        return bytes(sum(matrix, []))
 
-def xor_bytes(a, b):
-    return bytes(i^j for i, j in zip(a, b))
+    def xor_bytes(self, a, b):
+        return bytes(i^j for i, j in zip(a, b))
 
-def inc_bytes(a):
-    out = list(a)
-    for i in reversed(range(len(out))):
-        if out[i] == 0xFF:
-            out[i] = 0
-        else:
-            out[i] += 1
-            break
-    return bytes(out)
+    def inc_bytes(self, a):
+        out = list(a)
+        for i in reversed(range(len(out))):
+            if out[i] == 0xFF:
+                out[i] = 0
+            else:
+                out[i] += 1
+                break
+        return bytes(out)
 
-def pad(plaintext):
-    padding_len = 16 - (len(plaintext) % 16)
-    padding = bytes([padding_len] * padding_len)
-    return plaintext + padding
+    def pad(self, plaintext):
+        padding_len = 16 - (len(plaintext) % 16)
+        padding = bytes([padding_len] * padding_len)
+        return plaintext + padding
 
-def unpad(plaintext):
-    #PKCS#7
-    padding_len = plaintext[-1]
-    assert padding_len > 0
-    message, padding = plaintext[:-padding_len], plaintext[-padding_len:]
-    assert all(p == padding_len for p in padding)
-    return message
+    def unpad(self, plaintext):
+        #PKCS#7
+        padding_len = plaintext[-1]
+        assert padding_len > 0
+        message, padding = plaintext[:-padding_len], plaintext[-padding_len:]
+        assert all(p == padding_len for p in padding)
+        return message
 
-def split_blocks(message, block_size=16, require_padding=True):
-        assert len(message) % block_size == 0 or not require_padding
-        return [message[i:i+16] for i in range(0, len(message), block_size)]
+    def split_blocks(self, message, block_size=16, require_padding=True):
+            assert len(message) % block_size == 0 or not require_padding
+            return [message[i:i+16] for i in range(0, len(message), block_size)]
 
-rounds_by_key_size = {16: 10, 24: 12, 32: 14}
+    rounds_by_key_size = {16: 10, 24: 12, 32: 14}
 
-def expand_key(master_key, n_rounds):
-    key_columns = BytesToMatrix(master_key)
-    iteration_size = len(master_key) // 4
-    i = 1
+    def expand_key(self, master_key, n_rounds):
+        key_columns = self.BytesToMatrix(master_key)
+        iteration_size = len(master_key) // 4
+        i = 1
 
-    while len(key_columns) < (n_rounds + 1) * 4:
-        word = list(key_columns[-1])
+        while len(key_columns) < (n_rounds + 1) * 4:
+            word = list(key_columns[-1])
 
-        if len(key_columns) % iteration_size == 0:
-            word.append(word.pop(0))
-            word = [s_box[b] for b in word]
-            word[0] ^= r_con[i]
-            i += 1
-        elif len(master_key) == 32 and len(key_columns) % iteration_size == 4:
-            word = [s_box[b] for b in word]
+            if len(key_columns) % iteration_size == 0:
+                word.append(word.pop(0))
+                word = [s_box[b] for b in word]
+                word[0] ^= self.r_con[i]
+                i += 1
+            elif len(master_key) == 32 and len(key_columns) % iteration_size == 4:
+                word = [s_box[b] for b in word]
 
-        word = xor_bytes(word, key_columns[-iteration_size])
-        key_columns.append(word)
+            word = self.xor_bytes(word, key_columns[-iteration_size])
+            key_columns.append(word)
 
-    return [key_columns[4*i:4*(i+1)] for i in range(len(key_columns) // 4)]
-
-
-def encrypt_block(plaintext, key_matrices, n_rounds):
-    assert len(plaintext) == 16
-
-    plain_state = BytesToMatrix(plaintext)
-    add_round_key(plain_state, key_matrices[0])
-
-    for i in range(1, n_rounds):
-        sub_bytes(plain_state)
-        shift_rows(plain_state)
-        mix_columns(plain_state)
-        add_round_key(plain_state, key_matrices[i])
-
-    sub_bytes(plain_state)
-    shift_rows(plain_state)
-    add_round_key(plain_state, key_matrices[-1])
-
-    return MatrixToBytes(plain_state)
+        return [key_columns[4*i:4*(i+1)] for i in range(len(key_columns) // 4)]
 
 
-def decrypt_block(ciphertext, key_matrices, n_rounds):
-    assert len(ciphertext) == 16
+    def encrypt_block(self, plaintext, key_matrices, n_rounds):
+        assert len(plaintext) == 16
 
-    cipher_state = BytesToMatrix(ciphertext)
-    add_round_key(cipher_state, key_matrices[-1])
-    inv_shift_rows(cipher_state)
-    inv_sub_bytes(cipher_state)
+        plain_state = self.BytesToMatrix(plaintext)
+        self.add_round_key(plain_state, key_matrices[0])
 
-    for i in range(n_rounds - 1, 0, -1):
-        add_round_key(cipher_state, key_matrices[i])
-        inv_mix_columns(cipher_state)
-        inv_shift_rows(cipher_state)
-        inv_sub_bytes(cipher_state)
+        for i in range(1, n_rounds):
+            self.sub_bytes(plain_state)
+            self.shift_rows(plain_state)
+            self.mix_columns(plain_state)
+            self.add_round_key(plain_state, key_matrices[i])
 
-    add_round_key(cipher_state, key_matrices[0])
+        self.sub_bytes(plain_state)
+        self.shift_rows(plain_state)
+        self.add_round_key(plain_state, key_matrices[-1])
 
-    return MatrixToBytes(cipher_state)
-
-
-def encrypt_cbc(plaintext, iv, key_matrices, n_rounds):
-    assert len(iv) == 16
-
-    plaintext = pad(plaintext)
-    blocks = []
-    previous = iv
-
-    for plaintext_block in split_blocks(plaintext):
-        block = encrypt_block(xor_bytes(plaintext_block, previous), key_matrices, n_rounds)
-        blocks.append(block)
-        previous = block
-
-    return b''.join(blocks)
+        return self.MatrixToBytes(plain_state)
 
 
-def decrypt_cbc(ciphertext, iv, key_matrices, n_rounds):
-    assert len(iv) == 16
+    def decrypt_block(self, ciphertext, key_matrices, n_rounds):
+        assert len(ciphertext) == 16
 
-    blocks = []
-    previous = iv
+        cipher_state = self.BytesToMatrix(ciphertext)
+        self.add_round_key(cipher_state, key_matrices[-1])
+        self.inv_shift_rows(cipher_state)
+        self.inv_sub_bytes(cipher_state)
 
-    for ciphertext_block in split_blocks(ciphertext):
-        blocks.append(xor_bytes(previous, decrypt_block(ciphertext_block, key_matrices, n_rounds)))
-        previous = ciphertext_block
+        for i in range(n_rounds - 1, 0, -1):
+            self.add_round_key(cipher_state, key_matrices[i])
+            self.inv_mix_columns(cipher_state)
+            self.inv_shift_rows(cipher_state)
+            self.inv_sub_bytes(cipher_state)
 
-    return unpad(b''.join(blocks))
+        self.add_round_key(cipher_state, key_matrices[0])
 
-AES_KEY_SIZE = 16
-HMAC_KEY_SIZE = 16
-IV_SIZE = 16
+        return self.MatrixToBytes(cipher_state)
 
-SALT_SIZE = 16
-HMAC_SIZE = 32
 
-def get_key_iv(password, salt, workload=100000):
-    stretched = pbkdf2_hmac('sha256', password, salt, workload, AES_KEY_SIZE + IV_SIZE + HMAC_KEY_SIZE)
-    aes_key, stretched = stretched[:AES_KEY_SIZE], stretched[AES_KEY_SIZE:]
-    hmac_key, stretched = stretched[:HMAC_KEY_SIZE], stretched[HMAC_KEY_SIZE:]
-    iv = stretched[:IV_SIZE]
-    return aes_key, hmac_key, iv
+    def encrypt_cbc(self, plaintext, iv, key_matrices, n_rounds):
+        assert len(iv) == 16
 
-def encrypt(key, plaintext, workload=100000):
-    if isinstance(key, str):
-        key = key.encode('utf-8')
-    if isinstance(plaintext, str):
-        plaintext = plaintext.encode('utf-8')
+        plaintext = self.pad(plaintext)
+        blocks = []
+        previous = iv
 
-    salt = os.urandom(SALT_SIZE)
-    key, hmac_key, iv = get_key_iv(key, salt, workload)
-    key_matrices = expand_key(key, rounds_by_key_size[len(key)])
-    ciphertext = encrypt_cbc(plaintext, iv, key_matrices, rounds_by_key_size[len(key)])
-    hmac = new_hmac(hmac_key, salt + ciphertext, 'sha256').digest()
-    assert len(hmac) == HMAC_SIZE
+        for plaintext_block in self.split_blocks(plaintext):
+            block = self.encrypt_block(self.xor_bytes(plaintext_block, previous), key_matrices, n_rounds)
+            blocks.append(block)
+            previous = block
 
-    return hmac + salt + ciphertext
+        return b''.join(blocks)
 
-def decrypt(key, ciphertext, workload=100000):
-    assert len(ciphertext) % 16 == 0, "Ciphertext must be made of full 16-byte blocks."
-    assert len(ciphertext) >= 32
 
-    if isinstance(key, str):
-        key = key.encode('utf-8')
+    def decrypt_cbc(self, ciphertext, iv, key_matrices, n_rounds):
+        assert len(iv) == 16
 
-    hmac, ciphertext = ciphertext[:HMAC_SIZE], ciphertext[HMAC_SIZE:]
-    salt, ciphertext = ciphertext[:SALT_SIZE], ciphertext[SALT_SIZE:]
-    key, hmac_key, iv = get_key_iv(key, salt, workload)
+        blocks = []
+        previous = iv
 
-    expected_hmac = new_hmac(hmac_key, salt + ciphertext, 'sha256').digest()
-    assert compare_digest(hmac, expected_hmac), 'Ciphertext corrupted or tampered.'
+        for ciphertext_block in self.split_blocks(ciphertext):
+            blocks.append(self.xor_bytes(previous, self.decrypt_block(ciphertext_block, key_matrices, n_rounds)))
+            previous = ciphertext_block
 
-    key_matrices = expand_key(key, rounds_by_key_size[len(key)])
-    return decrypt_cbc(ciphertext, iv, key_matrices, rounds_by_key_size[len(key)])
+        return self.unpad(b''.join(blocks))
+
+    AES_KEY_SIZE = 16
+    HMAC_KEY_SIZE = 16
+    IV_SIZE = 16
+
+    SALT_SIZE = 16
+    HMAC_SIZE = 32
+
+    def get_key_iv(self, password, salt, workload=100000):
+        stretched = pbkdf2_hmac('sha256', password, salt, workload, self.AES_KEY_SIZE + self.IV_SIZE + self.HMAC_KEY_SIZE)
+        aes_key, stretched = stretched[:self.AES_KEY_SIZE], stretched[self.AES_KEY_SIZE:]
+        hmac_key, stretched = stretched[:self.HMAC_KEY_SIZE], stretched[self.HMAC_KEY_SIZE:]
+        iv = stretched[:self.IV_SIZE]
+        return aes_key, hmac_key, iv
+
+    def encrypt(self, key, plaintext, workload=100000):
+        if isinstance(key, str):
+            key = key.encode('utf-8')
+        if isinstance(plaintext, str):
+            plaintext = plaintext.encode('utf-8')
+
+        salt = os.urandom(self.SALT_SIZE)
+        key, hmac_key, iv = self.get_key_iv(key, salt, workload)
+        key_matrices = self.expand_key(key, self.rounds_by_key_size[len(key)])
+        ciphertext = self.encrypt_cbc(plaintext, iv, key_matrices, self.rounds_by_key_size[len(key)])
+        hmac = new_hmac(hmac_key, salt + ciphertext, 'sha256').digest()
+        assert len(hmac) == self.HMAC_SIZE
+
+        return hmac + salt + ciphertext
+
+    def decrypt(self, key, ciphertext, workload=100000):
+        assert len(ciphertext) % 16 == 0, "Ciphertext must be made of full 16-byte blocks."
+        assert len(ciphertext) >= 32
+
+        if isinstance(key, str):
+            key = key.encode('utf-8')
+
+        hmac, ciphertext = ciphertext[:self.HMAC_SIZE], ciphertext[self.HMAC_SIZE:]
+        salt, ciphertext = ciphertext[:self.SALT_SIZE], ciphertext[self.SALT_SIZE:]
+        key, hmac_key, iv = self.get_key_iv(key, salt, workload)
+
+        expected_hmac = new_hmac(hmac_key, salt + ciphertext, 'sha256').digest()
+        assert compare_digest(hmac, expected_hmac), 'Ciphertext corrupted or tampered.'
+
+        key_matrices = self.expand_key(key, self.rounds_by_key_size[len(key)])
+        return self.decrypt_cbc(ciphertext, iv, key_matrices, self.rounds_by_key_size[len(key)])
 
