@@ -4,6 +4,7 @@ from tkinter import filedialog
 from tkinter import ttk
 import pyperclip
 import os
+import hashlib
 from AES import AESCipher
 import fsb795
 import json
@@ -21,17 +22,35 @@ class PasswordDialog(tk.simpledialog.Dialog):
 
 class AESEncryptionApp:
     def __init__(self, root):
-        # Показываем диалог ввода пароля перед созданием основного окна
-        password_dialog = PasswordDialog(root)
-        if password_dialog.result != "admin":
-            root.destroy()
-            return
-
-        # Загружаем данные о пользователях из JSON-файла
+        # Добавим атрибут users_data
         self.users_data = self.load_users_data()
+
+        while True:
+            # Показываем диалог ввода пароля перед созданием основного окна
+            password_dialog = PasswordDialog(root)
+            if password_dialog.result == "admin":
+                break  # Если пароль верный, выходим из цикла
+            else:
+                # Если пароль неверный, показываем уведомление и повторяем ввод пароля
+                response = tkinter.messagebox.askretrycancel("Ошибка", "Неправильный пароль. Повторить ввод?")
+                if not response:
+                    root.destroy()
+                    return
 
         # Добавляем проверку сертификата
         cert_path = filedialog.askopenfilename(title="Выберите сертификат", filetypes=[("Certificate Files", "*.cer")])
+
+        # Обрабатываем случай, когда пользователь нажал "Отмена" в диалоге выбора файла сертификата
+        if not cert_path:
+            tkinter.messagebox.showerror("Ошибка", "Отменено. Программа будет закрыта.")
+            root.destroy()
+            return
+
+        # Проверяем данные внутри сертификата
+        if not self.check_certificate_data(cert_path):
+            root.destroy()
+            return
+
         user_data = self.find_user_by_certificate(cert_path)
 
         if user_data:
@@ -148,20 +167,58 @@ class AESEncryptionApp:
         # Вызываем toggle_mode при запуске приложения
         self.toggle_mode()
 
+    def hash_data(self, user_data):
+        # Хеширование только для необходимых полей (не хешируем "GN")
+        hashed_user_data = {}
+        for key, value in user_data.items():
+            if key in ["unstructuredName", "E", "SNILS", "INN", "Country", "SN", "CN"]:
+                hashed_user_data[key] = hashlib.sha256(value.encode()).hexdigest()
+            else:
+                hashed_user_data[key] = value
+
+        return hashed_user_data
+
     def load_users_data(self):
-        # Загружаем данные о пользователях из JSON-файла
+        # Загружаем хешированные данные о пользователях из JSON-файла
         try:
             with open("users_data.json", "r", encoding="utf-8") as json_file:
-                users_data = json.load(json_file)
+                hashed_users_data = json.load(json_file)
+
+            # Просто возвращаем загруженные данные
+            return hashed_users_data
+
         except (FileNotFoundError, json.JSONDecodeError):
-            users_data = {}
-        return users_data
+            return {}
 
     def save_users_data(self):
-        # Сохраняем данные о пользователях в JSON-файл
-        serialized_data = {key: json.dumps(value) for key, value in self.users_data.items()}
+        # Сохраняем хешированные данные о пользователях в JSON-файл
         with open("users_data.json", "w", encoding="utf-8") as json_file:
-            json.dump(serialized_data, json_file, ensure_ascii=False, indent=2)
+            json.dump(self.users_data, json_file, ensure_ascii=False, indent=2)
+
+
+    def check_certificate_data(self, cert_path):
+        try:
+            cert = fsb795.Certificate(cert_path)
+            dn, cert_type = cert.subjectCert()
+
+            # Проверяем наличие необходимых полей в сертификате
+            required_fields = ["unstructuredName", "E", "SNILS", "INN", "Country", "GN", "SN", "CN"]
+            for field in required_fields:
+                if field not in dn:
+                    tkinter.messagebox.showerror("Ошибка", f"Отсутствует обязательное поле в сертификате: {field}")
+                    return False
+
+            # Дополнительно проверяем наличие публичного ключа
+            public_key = cert.publicKey()
+            if not public_key:
+                tkinter.messagebox.showerror("Ошибка", "Отсутствует публичный ключ в сертификате.")
+                return False
+
+            return True
+
+        except Exception as e:
+            tkinter.messagebox.showerror("Ошибка", f"Ошибка при проверке сертификата: {e}")
+            return False
 
     def register_user(self, cert_path):
         # Регистрируем пользователя на основе данных из сертификата
@@ -169,11 +226,21 @@ class AESEncryptionApp:
             cert = fsb795.Certificate(cert_path)
             dn, cert_type = cert.subjectCert()
 
-            # Регистрируем все данные пользователя из сертификата
-            self.users_data[cert_path] = {key: str(value) for key, value in dn.items()}
-            # Сохраняем обновленные данные в JSON-файл, используя ensure_ascii=False
-            with open("users_data.json", "w", encoding="utf-8") as json_file:
-                json.dump(self.users_data, json_file, ensure_ascii=False, indent=2)
+            # Хэшируем только необходимые поля
+            hashed_user_data = {}
+            for key, value in dn.items():
+                if key in ["unstructuredName", "E", "SNILS", "INN", "Country", "SN", "CN"]:
+                    # Преобразовываем значения в строки перед хэшированием
+                    hashed_user_data[key] = hashlib.sha256(str(value).encode()).hexdigest()
+                else:
+                    hashed_user_data[key] = value
+
+            # Регистрируем пользователя с хешированными данными
+            self.users_data[cert_path] = hashed_user_data
+
+            # Сохраняем обновленные данные в JSON-файл
+            self.save_users_data()
+
         except Exception as e:
             print(f"Ошибка при регистрации пользователя: {e}")
 
@@ -310,10 +377,6 @@ class AESEncryptionApp:
         file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
         return file_path
 
-    def validate_key(self, key):
-        # Ограничиваем длину ключа до 16 символов
-        return len(key) <= 16
-
     def update_strength_indicator(self, event):
         key = self.get_key().decode("utf-8")
         strength = self.calculate_key_strength(key)
@@ -341,9 +404,17 @@ class AESEncryptionApp:
         # Рассчитываем процент выполненных критериев
         return (criteria_met / total_criteria) * 100
 
+    def validate_key_input(self, char):
+        # Проверка, что введенный символ является буквой латинского алфавита или цифрой
+        return char.isascii() and (char.isalpha() or char.isdigit())
+
+    def validate_key(self, key):
+        # Ограничиваем длину ключа до 16 символов
+        return len(key) <= 16 and all(self.validate_key_input(char) for char in key)
+
     def get_key(self):
-        # Получаем ключ из entry или используем пустую строку, если entry пустой
-        key = self.key_entry.get().encode("utf-8")
+        # Получаем ключ из entry, исключая все символы, которые не являются буквами латинского алфавита или цифрами
+        key = "".join(char for char in self.key_entry.get() if self.validate_key_input(char)).encode("utf-8")
         return key
 
 
